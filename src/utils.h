@@ -21,12 +21,42 @@
 #define UTILS_H_
 
 typedef unsigned int uint;
-typedef unsigned char uchar, cbool;
+typedef unsigned char uchar, cbool, byte;
 
 #define FALSE 0
 #define TRUE  1
 
 extern cbool file_exists(const char* file_path);
+extern cbool dir_exists(const char* dir_path);
+
+typedef enum
+{
+  VER_ALPHA   = 'a',
+  VER_BETA    = 'b',
+  VER_PREVIEW = 'p',
+  VER_DEBUG   = 'd',
+  VER_RELEASE = 'r',
+} app_version_type;
+
+typedef struct
+{
+  // App Name
+  char name[16];
+
+  // App Version
+  struct
+  {
+    const byte major;
+    const byte minor;
+    const byte patch;
+    const app_version_type type;
+  } v;
+  char v_string[32];
+} app_info;
+
+void get_app_v_string(const app_info* app_inf);
+cbool str_endswith(const char *str, const char* endswith);
+uint get_rand_range_uint(uint min, uint max);
 
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 

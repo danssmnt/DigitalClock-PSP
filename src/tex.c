@@ -19,6 +19,7 @@
 
 #include <stdio.h>
 #include <psprtc.h>
+#include <pspkernel.h>
 
 #include "lib/glib2d/glib2d.h"
 #include "utils.h"

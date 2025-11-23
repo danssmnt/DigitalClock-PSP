@@ -81,7 +81,7 @@ extern "C" {
  */
 #define USE_PNG
 // #define USE_JPEG
-// #define USE_VFPU
+#define USE_VFPU
 
 /**
  * \def G2D_SCR_W

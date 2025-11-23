@@ -85,5 +85,4 @@ int clock_tex_free(void);
 int clock_build_curr_tex_draw(const ScePspDateTime* time);
 int tex_draw(app_tex* tex, const ScePspFVector2* pos, const ScePspFVector2* size, g2dColor color);
 
-
 #endif /* TEX_H_ */

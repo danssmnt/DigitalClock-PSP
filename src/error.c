@@ -24,6 +24,7 @@
 #include "lib/glib2d/glib2d.h"
 #include "main.h"
 #include "tex.h"
+#include "music.h"
 #include "error.h"
 
 // Errors
@@ -35,7 +36,7 @@ static const app_error app_errors[] =
   {0x80000000 | -ERROR_ALLOCATING_TEXTURES,  "ERROR_ALLOCATING_TEXTURES",  "Unable to allocate memory for textures."},
   {0x80000000 | -ERROR_GETTING_TIME_RTC,     "ERROR_GETTING_TIME_RTC",     "sceRtcGetCurrentClockLocalTime() failed to provide time."},
   {0x80000000 | -ERROR_UNKNOWN,              "ERROR_UNKNOWN",              "Something unknown went very wrong."},
-};
+}; static const uint app_errors_size = ARRAY_SIZE(app_errors);
 
 // Display error to screen (aborts app...)
 int app_error_display(app_error_type err)
@@ -43,10 +44,19 @@ int app_error_display(app_error_type err)
   // Clear stuff
   g2dTerm();
   clock_tex_free();
+  music_end();
 
   cbool error_running = TRUE;
-
-  const app_error* error = &app_errors[-err];
+  const app_error* error;
+  
+  if (-err < 0 || -err >= app_errors_size)
+  {
+    error = &app_errors[app_errors_size-1];
+  }
+  else
+  {
+    error = &app_errors[-err];
+  }
 
   pspDebugScreenInit();
 
@@ -55,11 +65,9 @@ int app_error_display(app_error_type err)
   while ( error_running )
   {
     // Print error
-    // pspDebugScreenClear();
-
     pspDebugScreenSetXY(2, 2);
     pspDebugScreenSetTextColor(YELLOW);
-    pspDebugScreenPrintf("%s %s by danssmnt", app_name, app_ver);
+    pspDebugScreenPrintf("%s %s by danssmnt", app_inf.name, app_inf.v_string);
 
     pspDebugScreenSetXY(2, 5);
     pspDebugScreenSetTextColor(RED);

@@ -24,6 +24,9 @@
 #include <psprtc.h>
 #include <psptypes.h>
 #include <pspctrl.h>
+#include <time.h>
+#include <stdlib.h>
+#include <psppower.h>
 
 #include "main.h"
 #include "lib/glib2d/glib2d.h"
@@ -32,22 +35,26 @@
 #include "error.h"
 #include "tex.h"
 #include "battery.h"
+#include "music.h"
 
-#define APP_NAME    "Digital Clock"
-#define APP_VERSION "v2.1"
-
-const char* app_name  = APP_NAME;
-const char* app_ver   = APP_VERSION;
-
-PSP_MODULE_INFO(APP_NAME, PSP_MODULE_USER, 2, 0);
-PSP_MAIN_THREAD_ATTR(PSP_THREAD_ATTR_USER | PSP_THREAD_ATTR_VFPU);
+const app_info app_inf = 
+{
+  .name = "Digital Clock",
+  .v = { .major = 2, .minor = 2, .patch = 0, .type = VER_RELEASE },
+};
 
 cbool app_running = TRUE;
+cbool app_play_music = FALSE;
+
+PSP_MODULE_INFO("Digital Clock", PSP_MODULE_USER, app_inf.v.major, app_inf.v.minor);
+PSP_MAIN_THREAD_ATTR(PSP_THREAD_ATTR_USER | PSP_THREAD_ATTR_VFPU);
 
 int main(int args, char* argv[])
 {
   // -Wextra
   (void)args; (void)argv;
+
+  // INIT //////////////////////////////////////////
 
   // Callbacks should never fail
   if ( setup_callbacks() < 0 )
@@ -57,18 +64,37 @@ int main(int args, char* argv[])
   }
   
   // Neither should allocating mem for textures
+  // Error handling is done by the function itself
   if ( clock_tex_alloc() < 0 )
   {
     app_running = FALSE;
   }
+
+  srand(time(NULL));
+  get_app_v_string(&app_inf);
+
+  // Was music initialized correctly?
+  cbool music_initialized = music_init() == 0;
+
+  // Forces PPSSPP to play .mp3 with sampling rates != 44100
+  // Take a look around https://github.com/hrydgard/ppsspp/blob/master/Core/HLE/sceMp3.cpp#L479
+  // for more info...
+  // Playback for 48 kHz might be very bad though on PPSSPP
+  // This might break in the future?
+  sceKernelSetCompiledSdkVersion(0x03060000);
+
+  // No need to run at 222 or even 333 mHz, app is very light and
+  // we can preserve more battery power this way
+  scePowerSetClockFrequency(133, 133, 66);
+
+  // INIT //////////////////////////////////////////
 
   const g2dColor bg_color = BLACK;
 
   // Available Clock Colors (L / R to change)
   const g2dColor clock_colors[] = {RED, ORANGE, YELLOW, CHARTREUSE, 
                                    GREEN, SPRING_GREEN, CYAN, AZURE, BLUE, 
-                                   MAGENTA, ROSE, VIOLET, WHITE, 
-                                  GRAY};
+                                   VIOLET, MAGENTA, ROSE, WHITE, GRAY};
   const int clock_colors_size = ARRAY_SIZE(clock_colors);
   int curr_clock_color_index = 0;
 
@@ -77,17 +103,17 @@ int main(int args, char* argv[])
   const uchar brightness_modes_size = ARRAY_SIZE(brightness_modes);
   int curr_brightness_index = 0;
   
-  const ScePspFVector2 clock_time_size_sprites = { 80.0f, 160.0f };
-  const ScePspFVector2 clock_date_size_sprites = { 20.0f, 40.0f };
+  const ScePspFVector2 clock_big_size_sprites = { 80.0f, 160.0f };
+  const ScePspFVector2 clock_small_size_sprites = { 20.0f, 40.0f };
   
   const ScePspFVector2 clock_time_pos_sprites = { 60.0f, 120.0f };
   ScePspFVector2 clock_date_pos_sprites = { 360.0f, 240.0f };
 
   const ScePspFVector2 clock_bat_pos_sprite = { 330.0f, 240.0f };
+  const ScePspFVector2 clock_music_pos_sprite = { 300.0f, 240.0f };
   
   ScePspFVector2 curr_pos_time_sprites = clock_time_pos_sprites;
   ScePspFVector2 curr_pos_date_sprites = clock_date_pos_sprites;
-  ScePspFVector2 curr_pos_bat_sprites  = clock_bat_pos_sprite;
 
   // Centered
   const ScePspFVector2 clock_time_pos_colon = { (float)G2D_SCR_W / 2.0f, 120.0f };
@@ -97,6 +123,9 @@ int main(int args, char* argv[])
   int old_min = -1;
 
   SceCtrlLatch latch;
+  ScePspDateTime time_cust;
+
+  app_tex* bat_tex;
 
   g2dInit();
   
@@ -106,7 +135,6 @@ int main(int args, char* argv[])
 
     curr_pos_time_sprites.x = clock_time_pos_sprites.x;
     curr_pos_date_sprites.x = clock_date_pos_sprites.x;
-    curr_pos_bat_sprites.x  = clock_bat_pos_sprite.x;
 
     g2dClear(bg_color);
     
@@ -116,7 +144,7 @@ int main(int args, char* argv[])
       old_min = curr_time.minute;
     }
 
-    // This should never fail, otherwise something is horribly wrong!
+    // // This should never fail, otherwise something is horribly wrong!
     if ( sceRtcGetCurrentClockLocalTime(&curr_time) < 0 )
     {
       app_running = FALSE;
@@ -136,19 +164,18 @@ int main(int args, char* argv[])
       // Draw if it's not NULL (eg.: first tile is 0)
       if (curr_tex_draw.time[tile])
       {
-        tex_draw(curr_tex_draw.time[tile], &curr_pos_time_sprites, &clock_time_size_sprites, G2D_MODULATE(clock_colors[curr_clock_color_index], brightness_modes[curr_brightness_index], 255));
+        tex_draw(curr_tex_draw.time[tile], &curr_pos_time_sprites, &clock_big_size_sprites, G2D_MODULATE(clock_colors[curr_clock_color_index], brightness_modes[curr_brightness_index], 255));
       }
       
       curr_pos_time_sprites.x += 120.0f;
     }
 
-    ScePspDateTime time_cust;
     sceRtcGetCurrentClockLocalTime(&time_cust);
     
     // Draw colon every even second (for blinking)
     if ( time_cust.second % 2 == 0 )
     {
-      tex_draw(&main_clock_tex.s.colon, &clock_time_pos_colon, &clock_time_size_sprites, G2D_MODULATE(clock_colors[curr_clock_color_index], brightness_modes[curr_brightness_index], 255));
+      tex_draw(&main_clock_tex.s.colon, &clock_time_pos_colon, &clock_big_size_sprites, G2D_MODULATE(clock_colors[curr_clock_color_index], brightness_modes[curr_brightness_index], 255));
     }
 
     for ( int tile = 0; tile < 4; tile++ )
@@ -156,19 +183,22 @@ int main(int args, char* argv[])
       // Draw if it's not NULL (eg.: first tile is 0)
       if (curr_tex_draw.date[tile])
       {
-        tex_draw(curr_tex_draw.date[tile], &curr_pos_date_sprites, &clock_date_size_sprites, G2D_MODULATE(clock_colors[curr_clock_color_index], brightness_modes[curr_brightness_index], 255));
+        tex_draw(curr_tex_draw.date[tile], &curr_pos_date_sprites, &clock_small_size_sprites, G2D_MODULATE(clock_colors[curr_clock_color_index], brightness_modes[curr_brightness_index], 255));
       }
       
-      curr_pos_date_sprites.x += tile == 1 ? 30.0f : 30.0f;
+      curr_pos_date_sprites.x += 30.0f;
     }
 
-    tex_draw(&main_clock_tex.s.dot_bottom, &clock_date_pos_dot, &clock_date_size_sprites, G2D_MODULATE(clock_colors[curr_clock_color_index], brightness_modes[curr_brightness_index], 255));
+    tex_draw(&main_clock_tex.s.dot_bottom, &clock_date_pos_dot, &clock_small_size_sprites, G2D_MODULATE(clock_colors[curr_clock_color_index], brightness_modes[curr_brightness_index], 255));
     
-    app_tex* bat_tex;
     get_tex_by_curr_bat_status(&bat_tex);
 
-    tex_draw(bat_tex, &curr_pos_bat_sprites, &clock_date_size_sprites, G2D_MODULATE(clock_colors[curr_clock_color_index], brightness_modes[curr_brightness_index], 255));
+    tex_draw(bat_tex, &clock_bat_pos_sprite, &clock_small_size_sprites, G2D_MODULATE(clock_colors[curr_clock_color_index], brightness_modes[curr_brightness_index], 255));
 
+    if (app_play_music)
+    {
+      tex_draw(&main_clock_tex.s.icon_music, &clock_music_pos_sprite, &clock_small_size_sprites, G2D_MODULATE(clock_colors[curr_clock_color_index], brightness_modes[curr_brightness_index], 255));
+    }
 
     g2dFlip(G2D_VSYNC);
 
@@ -178,28 +208,42 @@ int main(int args, char* argv[])
 
     sceCtrlReadLatch(&latch);
 
-    // Press Select to exit the app
-    if ( latch.uiMake & PSP_CTRL_SELECT )
-    {
-      app_running = FALSE;
-    }
-
-    // Press Left / Right to change color
-    if ( latch.uiMake & PSP_CTRL_LEFT )
-    {
-      curr_clock_color_index = (curr_clock_color_index - 1 + clock_colors_size) % clock_colors_size;
-    }
-    
-    // Press Left / Right to change color
-    else if ( latch.uiMake & PSP_CTRL_RIGHT )
+    // Press START to change color
+    if ( latch.uiMake & PSP_CTRL_START )
     {
       curr_clock_color_index = (curr_clock_color_index + 1) % clock_colors_size;
     }
 
-    // Press Square to change brightness mode
-    if ( latch.uiMake & PSP_CTRL_SQUARE )
+    // Press Select to change brightness mode
+    if ( latch.uiMake & PSP_CTRL_SELECT )
     {
       curr_brightness_index = (curr_brightness_index + 1) % brightness_modes_size;
+    }
+
+    // Press Cross to toggle playing music
+    if ( latch.uiMake & PSP_CTRL_CROSS && music_initialized )
+    {
+      app_play_music = !app_play_music;
+      if (app_play_music) music_play_random(FALSE);
+      else 
+      {
+        if (music_thread_playing) music_stop();
+      }
+    }
+
+    // Press Left or Right to switch current music
+    if (app_play_music)
+    {
+      if ( latch.uiMake & PSP_CTRL_LEFT )
+      {
+        player_skipped_song = TRUE;
+        music_play_random(TRUE);
+      }
+      else if ( latch.uiMake & PSP_CTRL_RIGHT )
+      {
+        player_skipped_song = TRUE;
+        music_play_random(FALSE);
+      }
     }
 
     // CONTROLS ///////////////////////////////////////
@@ -207,6 +251,7 @@ int main(int args, char* argv[])
 
   g2dTerm();
   clock_tex_free();
+  music_end();
 
   sceKernelExitGame();
 

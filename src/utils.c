@@ -19,6 +19,10 @@
 
 #include <pspiofilemgr.h>
 #include <pspkernel.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <time.h>
 
 #include "utils.h"
 
@@ -27,6 +31,8 @@
  */
 cbool file_exists(const char* file_path)
 {
+  if (file_path == 0) return FALSE;
+
   SceIoStat stat = {0};
   
   if ( sceIoGetstat(file_path, &stat) < 0 )
@@ -35,4 +41,38 @@ cbool file_exists(const char* file_path)
   }
 
   return FIO_SO_ISREG(stat.st_attr);
+}
+
+/* Check if dir exists by checking attributes
+ * Better than opening and closing it
+ */
+cbool dir_exists(const char* dir_path)
+{
+  if (dir_path == 0) return FALSE;
+
+  SceIoStat stat = {0};
+  
+  if ( sceIoGetstat(dir_path, &stat) < 0 )
+  {
+    return FALSE;
+  }
+
+  return FIO_SO_ISDIR(stat.st_attr);
+}
+
+void get_app_v_string(const app_info* app_inf)
+{
+  if (app_inf == 0) return;
+
+  snprintf((char*)app_inf->v_string, sizeof(app_inf->v_string), "%i.%i.%i%c", app_inf->v.major, app_inf->v.minor, app_inf->v.patch, app_inf->v.type);
+}
+
+cbool str_endswith(const char *str, const char* endswith) 
+{
+  return !strcasecmp(str + strlen(str) - strlen(endswith), endswith);
+}
+
+uint get_rand_range_uint(uint min, uint max)
+{
+  return (rand() % (max - min + 1)) + min;
 }

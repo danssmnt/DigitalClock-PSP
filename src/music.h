@@ -17,13 +17,30 @@
  *  along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MAIN_H_
-#define MAIN_H_
+#ifndef MUSIC_H_
+#define MUSIC_H_
 
 #include "utils.h"
 
-extern const app_info app_inf;
-extern cbool app_running;
-extern cbool app_play_music;
+// A playlist can have up to this many songs
+#define MUSIC_PLAYLIST_SIZE 1024
 
-#endif /* MAIN_H_ */
+typedef struct
+{
+    char* file_path[MUSIC_PLAYLIST_SIZE];
+    uint size;
+} music_playlist;
+
+extern music_playlist current_playlist;
+extern cbool music_thread_playing;
+extern cbool player_skipped_song;
+extern SceUID mp3_play_thid;
+
+int music_init();
+int music_stop();
+int music_end();
+void music_play_random(cbool back);
+void music_shuffle_playlist();
+
+
+#endif
